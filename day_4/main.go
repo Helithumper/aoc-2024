@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	// INPUT_FILE  = "testinput.txt"
+	// INPUT_FILE = "testinput.txt"
 	INPUT_FILE  = "input.txt"
-	TARGET_WORD = "XMAS"
+	TARGET_WORD = "MS" // We want to find SAM/MAS, however since we'll start at A we represent this as "MS"
 )
 
 func ReadFile(filename string) []string {
@@ -47,6 +47,14 @@ func (d Direction) String() string {
 	return []string{"UP", "UP_RIGHT", "RIGHT", "DOWN_RIGHT", "DOWN", "DOWN_LEFT", "LEFT", "UP_LEFT"}[d]
 }
 
+func Reverse(s string) string {
+	runes := []rune(s)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
+}
+
 func hunt(i int, j int, lines []string, soFar string, direction Direction) bool {
 	// Is this a valid position?
 	if i < 0 || j < 0 || i >= len(lines) || j >= len(lines[i]) {
@@ -57,62 +65,35 @@ func hunt(i int, j int, lines []string, soFar string, direction Direction) bool 
 	// then continue moving in the correct direction
 	currentChar := string(lines[i][j])
 	proposedWord := soFar + currentChar
-	fmt.Printf("[%d][%d] => %s\n", i, j, proposedWord)
-	isProposedWordPresent := strings.Index(TARGET_WORD, proposedWord)
-	if isProposedWordPresent != 0 {
+	fmt.Printf("[%d][%d]<%s> => %s\n", i, j, direction.String(), proposedWord)
+	isProposedWordPresentFwds := strings.Index(TARGET_WORD, proposedWord)
+	isProposedWordPresentBkwds := strings.Index(TARGET_WORD, Reverse(proposedWord))
+	fmt.Printf("\t[%s] Fwds: %d Bkwds: %d\n", direction.String(), isProposedWordPresentFwds, isProposedWordPresentBkwds)
+	if isProposedWordPresentFwds == -1 && isProposedWordPresentBkwds == -1 {
 		// Can't find the proposed word
+		fmt.Printf("\t[%s] No Match\n", direction.String())
 		return false
 	}
 
-	if proposedWord == TARGET_WORD {
+	if proposedWord == TARGET_WORD || Reverse(proposedWord) == TARGET_WORD {
 		// We're done
 		fmt.Printf("\t[%s] Match!\n", direction.String())
 		return true
 	}
 
+	// Since we want to explore the opposite side from where we are looking, these will be flipped
+	// UP_RIGHT <-> DOWN_LEFT
+	// DOWN_RIGHT <-> UP_LEFT
+	// We also want to skip the original spot so we don't see the A
 	switch direction {
-	case UP:
-		if i < 0 {
-			return false
-		}
-		return hunt(i-1, j, lines, proposedWord, direction)
-	case UP_RIGHT:
-		if i < 0 || j >= len(lines[i]) {
-			return false
-		}
-		return hunt(i-1, j+1, lines, proposedWord, direction)
-
-	case RIGHT:
-		if j >= len(lines[i]) {
-			return false
-		}
-		return hunt(i, j+1, lines, proposedWord, direction)
-	case DOWN_RIGHT:
-		if i >= len(lines) || j >= len(lines[i]) {
-			return false
-		}
-		return hunt(i+1, j+1, lines, proposedWord, direction)
-	case DOWN:
-		if i >= len(lines) {
-			return false
-		}
-		return hunt(i+1, j, lines, proposedWord, direction)
-	case DOWN_LEFT:
-		if i >= len(lines) || j < 0 {
-			return false
-		}
-		return hunt(i+1, j-1, lines, proposedWord, direction)
-
-	case LEFT:
-		if j < 0 {
-			return false
-		}
-		return hunt(i, j-1, lines, proposedWord, direction)
-	case UP_LEFT:
-		if i < 0 || j < 0 {
-			return false
-		}
-		return hunt(i-1, j-1, lines, proposedWord, direction)
+	case DOWN_LEFT: // Was UP_RIGHT, now DOWN_LEFT
+		return hunt(i-2, j+2, lines, proposedWord, direction)
+	case UP_LEFT: // Was DOWN_RIGHT, now UP_LEFT
+		return hunt(i+2, j+2, lines, proposedWord, direction)
+	case UP_RIGHT: // Was DOWN_LEFT, now UP_RIGHT
+		return hunt(i+2, j-2, lines, proposedWord, direction)
+	case DOWN_RIGHT: // Was UP_LEFT, now DOWN_RIGHT
+		return hunt(i-2, j-2, lines, proposedWord, direction)
 
 	default:
 		panic("invalid direction")
@@ -128,36 +109,8 @@ func Hunt(i int, j int, lines []string) int {
 	count := 0
 	fmt.Printf("Hunting at [%d][%d]\n", i, j)
 
-	// Up: i-1, j
-	if hunt(i-1, j, lines, string(lines[i][j]), UP) {
-		count++
-	}
-	// Up Right: i-1, j+1
-	if hunt(i-1, j+1, lines, string(lines[i][j]), UP_RIGHT) {
-		count++
-	}
-	// Right: i, j+1
-	if hunt(i, j+1, lines, string(lines[i][j]), RIGHT) {
-		count++
-	}
-	// Down Right: i+1, j+1
-	if hunt(i+1, j+1, lines, string(lines[i][j]), DOWN_RIGHT) {
-		count++
-	}
-	// Down: i+1, j
-	if hunt(i+1, j, lines, string(lines[i][j]), DOWN) {
-		count++
-	}
-	// Down Left: i+1, j-1
-	if hunt(i+1, j-1, lines, string(lines[i][j]), DOWN_LEFT) {
-		count++
-	}
-	// Left: i, j-1
-	if hunt(i, j-1, lines, string(lines[i][j]), LEFT) {
-		count++
-	}
-	// Up Left: i-1, j-1
-	if hunt(i-1, j-1, lines, string(lines[i][j]), UP_LEFT) {
+	// We have to see both to see an X
+	if hunt(i-1, j+1, lines, "", UP_RIGHT) && hunt(i+1, j+1, lines, "", DOWN_RIGHT) {
 		count++
 	}
 
@@ -170,7 +123,7 @@ func TraverseGrid(lines []string) int {
 	count := 0
 	for i, line := range lines {
 		for j, char := range line {
-			if char == 'X' {
+			if char == 'A' {
 				count += Hunt(i, j, lines)
 			}
 		}
