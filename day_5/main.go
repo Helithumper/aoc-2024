@@ -82,11 +82,59 @@ func toIntSlice(s string) []int {
 	return ints
 }
 
-func filterValidOrders(lines []string, prePostRules map[int][]int, postPreRules map[int][]int) [][]int {
+func swap(line []int, a int, b int) []int {
+	tmp := line[a]
+	line[a] = line[b]
+	line[b] = tmp
+	return line
+}
+
+// Returns fixed line, and whether it was fixed or not
+func fixedLine(line []int, prePostRules map[int][]int, postPreRules map[int][]int, fixed bool) ([]int, bool) {
+	for n, node := range line {
+		for c, cursor := range line {
+			// For each pairup, check if the pre and post rules are
+			// satisfied
+
+			// Equality, we ignore as this is the same node
+			if n == c {
+				continue
+			}
+
+			// BEFORE current node, left of it
+			// We want to ensure no postPreRules appear in the preceeding nodes
+			if c < n {
+				// NOTE flipped this and I ahve no idea why it worked
+				// The node we are looking for is BEFORE (pre) the current node
+				// we want to ensure that this node is not in the Posts list
+				for _, preceding := range prePostRules[node] {
+					if preceding == cursor {
+						fmt.Printf("[n=%d][c=%d] Rule Violated: %d must come after %d\n", n, c, node, cursor)
+						line = swap(line, n, c)
+						return fixedLine(line, prePostRules, postPreRules, true)
+					}
+				}
+			}
+
+			if n < c {
+				// The node we are looking for is AFTER (post) the current node
+				// we want to ensure that this node is not in the Pres list
+				for _, following := range postPreRules[node] {
+					if following == cursor {
+						fmt.Printf("[n=%d][c=%d] Rule Violated: n=%d must come before c=%d\n", n, c, node, cursor)
+						line = swap(line, n, c)
+						return fixedLine(line, prePostRules, postPreRules, true)
+					}
+				}
+			}
+		}
+	}
+	return line, fixed
+}
+
+// Find invalid orders and fix them, then return the fixed versions
+func filterInValidOrders(lines []string, prePostRules map[int][]int, postPreRules map[int][]int) [][]int {
 	validOrders := [][]int{}
-	// a line is valid if, for each node, it comes after any nodes which
-	// have it mapped in their post-nodes and it comes before any nodes
-	// which have it mapped in their pre-nodes
 	for _, line := range lines {
 		if !strings.Contains(line, ",") {
 			continue
@@ -95,45 +143,9 @@ func filterValidOrders(lines []string, prePostRules map[int][]int, postPreRules 
 		// Convert the strint to a slice of ints
 		ints := toIntSlice(line)
 		fmt.Printf("Evaluating: %v\n", ints)
-		valid := true
-		for n, node := range ints {
-			for c, cursor := range ints {
-				// For each pairup, check if the pre and post rules are
-				// satisfied
-
-				// Equality, we ignore as this is the same node
-				if n == c {
-					continue
-				}
-
-				// BEFORE current node, left of it
-				// We want to ensure no postPreRules appear in the preceeding nodes
-				if c < n {
-					// NOTE flipped this and I ahve no idea why it worked
-					// The node we are looking for is BEFORE (pre) the current node
-					// we want to ensure that this node is not in the Posts list
-					for _, preceding := range prePostRules[node] {
-						if preceding == cursor {
-							fmt.Printf("[n=%d][c=%d] Rule Violated: %d must come after %d\n", n, c, node, cursor)
-							valid = false
-						}
-					}
-				}
-
-				if n < c {
-					// The node we are looking for is AFTER (post) the current node
-					// we want to ensure that this node is not in the Pres list
-					for _, following := range postPreRules[node] {
-						if following == cursor {
-							fmt.Printf("[n=%d][c=%d] Rule Violated: n=%d must come before c=%d\n", n, c, node, cursor)
-							valid = false
-						}
-					}
-				}
-			}
-		}
-		if valid {
-			validOrders = append(validOrders, ints)
+		fixed, isFixed := fixedLine(ints, prePostRules, postPreRules, false)
+		if isFixed {
+			validOrders = append(validOrders, fixed)
 		}
 	}
 	return validOrders
@@ -145,7 +157,7 @@ func main() {
 	fmt.Printf("Pres: %v\n", pres)
 	fmt.Printf("Posts: %v\n", posts)
 
-	valid := filterValidOrders(lines, pres, posts)
+	valid := filterInValidOrders(lines, pres, posts)
 	fmt.Println(valid)
 	sum := 0
 	for _, v := range valid {
